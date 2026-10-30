@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>蘇州古鎮大閘蟹團 | 2026 SUZHOU</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Leaflet Map CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        earth: {
+                            50: '#FAF8F5',
+                            100: '#F2EDE4',
+                            200: '#E2D8C8',
+                            300: '#C7B8A2',
+                            600: '#8C7A6B',
+                            700: '#6E5F52',
+                            800: '#52473E',
+                            900: '#38302A',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['"Noto Sans TC"', '"Zen Maru Gothic"', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #EFECE6;
+            font-family: 'Noto Sans TC', sans-serif;
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .leaflet-popup-content-wrapper {
+            background: #FAF8F5 !important;
+            border-radius: 16px !important;
+            border: 1px solid #E2D8C8 !important;
+            padding: 6px !important;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1) !important;
+        }
+        .leaflet-popup-tip {
+            background: #FAF8F5 !important;
+        }
+    </style>
+</head>
+<body class="flex justify-center items-center min-h-screen py-0 md:py-6 font-sans text-earth-900 antialiased selection:bg-earth-200">
+
+    <div id="app" class="w-full md:max-w-[460px] h-screen md:h-[920px] bg-earth-50 md:rounded-[44px] shadow-2xl flex flex-col overflow-hidden relative border-0 md:border-8 border-earth-100">
+        
+        <!-- 頂部標題與航班資訊 -->
+        <div class="bg-white px-4 pt-3 pb-2 border-b border-earth-200 shrink-0 shadow-xs">
+            <div class="flex justify-between items-center">
+                <div>
+                    <p class="text-[10px] md:text-xs font-bold tracking-widest text-earth-600 uppercase">2026 SUZHOU</p>
+                    <h1 class="text-lg md:text-xl font-black tracking-tight text-earth-900 leading-tight">蘇州古鎮大閘蟹團</h1>
+                </div>
+                <div class="flex items-center space-x-1 bg-earth-100 px-2 py-1 rounded-xl text-xs font-extrabold text-earth-800">                  
+                </div>
+            </div>
+
+            <!-- 航班摘要 -->
+            <div class="mt-1.5 bg-earth-50 px-2.5 py-1.5 rounded-xl text-xs text-earth-900 flex justify-between items-center border border-earth-200 font-bold">
+                <div class="flex items-center space-x-1">
+                    <span class="bg-earth-200 text-earth-900 px-1.5 py-0.5 rounded text-[10px] font-black">去程</span>
+                    <span class="text-xs">11/14  CI501<br>08:45 ➔ 10:50</span>
+                </div>
+                <div class="flex items-center space-x-1">
+                    <span class="bg-earth-200 text-earth-900 px-1.5 py-0.5 rounded text-[10px] font-black">回程</span>
+                    <span class="text-xs">11/18  CI504<br>19:50 ➔ 21:55</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 橫向滑動日期選單 (11/14 六 至 11/18 三) -->
+        <div class="sticky top-0 bg-white/95 backdrop-blur-md z-20 px-2.5 py-1.5 border-b border-earth-200 flex space-x-1.5 overflow-x-auto hide-scrollbar shadow-xs shrink-0">
+            <button v-for="(day, index) in days" :key="index"
+                @click="selectDay(index)"
+                :class="activeDayIndex === index ? 'bg-earth-800 text-earth-50 shadow-sm scale-102' : 'bg-earth-100 text-earth-800 hover:bg-earth-200'"
+                class="px-2.5 py-1 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center space-x-1">
+                <span class="text-[10px] opacity-90 font-extrabold">{{ day.week }}</span>
+                <span class="font-black text-xs md:text-sm">{{ day.date }}</span>
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto hide-scrollbar pb-28">
+            
+            <!-- TAB 1: 每日行程表 -->
+            <div v-if="currentTab === 'itinerary'">
+                <div class="p-5 md:p-6">
+                    <div class="flex justify-between items-end mb-3.5">
+                        <div>
+                            <span class="text-xs md:text-sm font-extrabold text-earth-600 tracking-wider uppercase">DAY {{ activeDayIndex + 1 }}</span>
+                            <h2 class="text-2xl md:text-3xl font-extrabold text-earth-900 mt-0.5">{{ currentDay.title }}</h2>
+                        </div>
+                        <button @click="openAddModal" class="bg-earth-800 text-white text-sm md:text-base font-bold px-4 py-2 rounded-xl shadow hover:bg-earth-900 transition flex items-center space-x-1.5 shrink-0">
+                            <i class="fa-solid fa-plus text-xs"></i>
+                            <span>新增行程</span>
+                        </button>
+                    </div>
+
+                    <!-- 天氣與降雨率列 (已移除「預報：」字樣並重排) -->
+                    <div class="mb-5 bg-white p-3.5 px-4 rounded-2xl border border-earth-200 shadow-xs flex items-center justify-between text-sm md:text-base text-earth-900 font-bold">
+                        <div class="flex items-center space-x-2">
+                            <i class="fa-solid text-amber-600 text-lg" :class="weatherIconClass"></i>
+                            <span class="font-black text-earth-900">{{ currentDay.weather.condition }}</span>
+                        </div>
+                        <div class="flex items-center space-x-3.5">
+                            <span class="flex items-center space-x-1 text-earth-800">
+                                <i class="fa-solid fa-temperature-half text-earth-600 text-xs"></i>
+                                <span>{{ currentDay.weather.temp }}</span>
+                            </span>
+                            <span class="flex items-center space-x-1 text-sky-700 font-black">
+                                <i class="fa-solid fa-umbrella text-xs"></i>
+                                <span>{{ currentDay.weather.rain }}</span>
+                            </span>
+                            <button @click="fetchWeatherData" title="更新天氣" class="text-earth-400 hover:text-earth-800 transition pl-0.5">
+                                <i class="fa-solid fa-rotate text-xs" :class="{ 'fa-spin': isWeatherLoading }"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="-mt-3 mb-4 px-1 text-[11px] md:text-xs text-earth-600 font-medium">{{ currentDay.weather.source || '行程參考值' }}；出發前請再確認最新預報。</p>
+
+                    <!-- 行程卡片列表 -->
+                    <div class="space-y-4">
+                        <div v-for="(item, idx) in currentDay.items" :key="idx"
+                            class="bg-white p-5 rounded-3xl border border-earth-200 shadow-xs relative group hover:shadow-md transition-all">
+                            
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center space-x-2 text-base md:text-lg font-black text-earth-900 bg-earth-100 px-3.5 py-1.5 rounded-xl border border-earth-200">
+                                    <i class="fa-regular fa-clock text-earth-700"></i>
+                                    <span>{{ item.time }}</span>
+                                </div>
+                                <button @click="promptDeleteItem(idx)" class="text-earth-400 hover:text-red-500 transition p-2" title="刪除行程">
+                                    <i class="fa-solid fa-trash-can text-base"></i>
+                                </button>
+                            </div>
+
+                            <div class="mt-3.5 flex justify-between items-center">
+                                <h3 class="font-extrabold text-earth-900 text-xl md:text-2xl flex items-center space-x-2 pr-2">
+                                    <i class="fa-solid fa-location-dot text-earth-700 text-lg"></i>
+                                    <span>{{ item.location }}</span>
+                                </h3>
+                                <a :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(item.location)" target="_blank" rel="noopener noreferrer"
+                                    class="text-xs text-earth-900 font-extrabold flex items-center space-x-1 bg-earth-100 hover:bg-earth-200 px-2.5 py-1 rounded-lg transition border border-earth-200 shrink-0">
+                                    <i class="fa-solid fa-diamond-turn-right text-earth-700 text-[10px]"></i>
+                                    <span>導航</span>
+                                </a>
+                            </div>
+
+                            <div class="mt-4 pt-3.5 border-t border-earth-100 space-y-2.5 text-base md:text-lg text-earth-900 bg-earth-50 p-4 rounded-2xl border border-earth-100 font-medium leading-relaxed">
+                                <div class="flex items-start space-x-2">
+                                    <span class="text-lg">ℹ️</span>
+                                    <span class="flex-1"><strong>簡介：</strong>{{ item.intro }}</span>
+                                </div>
+                                <div class="flex items-start space-x-2 pt-1 border-t border-earth-200/60">
+                                    <span class="text-lg">📝</span>
+                                    <span class="flex-1"><strong>備注：</strong>{{ item.note }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: 智慧地圖 -->
+            <div v-if="currentTab === 'map'" class="p-5 md:p-6 flex flex-col h-[calc(100vh-190px)] md:h-[calc(920px-190px)]">
+                <div class="mb-4">
+                    <span class="text-xs md:text-sm font-extrabold text-earth-600 tracking-wider uppercase">GPS & NAVIGATION</span>
+                    <h2 class="text-2xl md:text-3xl font-extrabold text-earth-900 mt-0.5">{{ currentDay.date }} ({{ currentDay.week }}) 景點導覽</h2>
+                    <p class="text-sm md:text-base text-earth-700 font-bold mt-1">顯示已辨識的景點位置；點選標記可開啟導航。未能精確定位的地點會以區域參考點顯示。</p>
+                    <div class="mt-3 flex gap-2">
+                        <button @click="initMap" class="bg-white border border-earth-200 text-earth-800 px-3 py-2 rounded-xl text-xs font-bold shadow-xs hover:bg-earth-100 transition"><i class="fa-solid fa-arrows-rotate mr-1"></i>重新整理地圖</button>
+                        <a :href="dayDirectionsUrl" target="_blank" rel="noopener noreferrer" class="bg-earth-800 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-xs hover:bg-earth-900 transition"><i class="fa-solid fa-route mr-1"></i>開啟當日路線</a>
+                    </div>
+                </div>
+                <div id="map" class="flex-1 rounded-3xl shadow-md border-2 border-earth-200 z-10 w-full overflow-hidden"></div>
+            </div>
+
+            <!-- TAB 3: 住宿資訊 -->
+            <div v-if="currentTab === 'accommodation'" class="p-5 md:p-6">
+                <div class="mb-4">
+                    <span class="text-xs md:text-sm font-extrabold text-earth-600 tracking-wider uppercase">ACCOMMODATION</span>
+                    <h2 class="text-2xl md:text-3xl font-extrabold text-earth-900 mt-0.5">全程住宿資訊</h2>
+                    <p class="text-sm md:text-base text-earth-700 font-bold mt-1">各站飯店與民宿入住詳情</p>
+                </div>
+
+                <div class="space-y-4">
+                    <div v-for="(hotel, idx) in hotels" :key="idx" class="bg-white p-5 rounded-3xl border border-earth-200 shadow-xs">
+                        <div class="flex justify-between items-start mb-3">
+                            <span class="text-xs bg-earth-800 text-earth-50 px-2.5 py-1 rounded-lg font-black">第 {{ idx + 1 }} 站住宿</span>
+                            <span class="text-xs bg-earth-100 text-earth-900 px-3 py-1 rounded-lg font-black border border-earth-200">{{ hotel.dates }}</span>
+                        </div>
+                        <h3 class="font-extrabold text-earth-900 text-xl md:text-2xl flex items-center space-x-2 mb-3">
+                            <i class="fa-solid fa-hotel text-earth-700 text-lg"></i>
+                            <span>{{ hotel.name }}</span>
+                        </h3>
+                        
+                        <div class="bg-earth-50 p-4 rounded-2xl border border-earth-100 space-y-2.5 text-base md:text-lg text-earth-900 font-medium">
+                            <div class="flex items-start space-x-2">
+                                <span class="text-lg">📍</span>
+                                <span class="flex-1"><strong>地址：</strong>{{ hotel.address }}</span>
+                            </div>
+                            <div class="flex items-start space-x-2">
+                                <span class="text-lg">🛏️</span>
+                                <span class="flex-1"><strong>房型：</strong>{{ hotel.rooms }}</span>
+                            </div>
+                            <div class="flex items-start space-x-2">
+                                <span class="text-lg">🕒</span>
+                                <span class="flex-1"><strong>時間：</strong>{{ hotel.time }}</span>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 flex justify-end">
+                            <a :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(hotel.address)" target="_blank"
+                                class="text-sm md:text-base text-earth-900 font-extrabold flex items-center space-x-2 bg-earth-100 hover:bg-earth-200 px-4 py-2 rounded-xl transition border border-earth-200">
+                                <i class="fa-solid fa-diamond-turn-right text-earth-700"></i>
+                                <span>Google 導航</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: 記帳系統 -->
+            <div v-if="currentTab === 'expense'" class="p-5 md:p-6">
+                <div class="mb-4">
+                    <span class="text-xs md:text-sm font-extrabold text-earth-600 tracking-wider uppercase">EXPENSE & CURRENCY</span>
+                    <h2 class="text-2xl md:text-3xl font-extrabold text-earth-900 mt-0.5">旅行記帳與匯率換算</h2>
+                </div>
+
+                <div class="bg-white p-5 rounded-3xl border border-earth-200 shadow-xs mb-5">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="text-sm md:text-base font-extrabold text-earth-800 uppercase tracking-wider">即時匯率換算 (RMB ➔ NTD)</span>
+                        <div class="flex items-center space-x-1.5 text-sm md:text-base text-earth-800 font-extrabold">
+                            <span>匯率:</span>
+                            <input type="number" step="0.01" v-model.number="exchangeRate" class="w-20 bg-earth-100 px-2.5 py-1 rounded-xl text-center font-black border border-earth-200">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3.5">
+                        <div class="bg-earth-50 p-4 rounded-2xl border border-earth-200">
+                            <label class="text-xs md:text-sm font-extrabold text-earth-600 block">人民幣 (RMB ¥)</label>
+                            <input type="number" v-model.number="calcRMB" placeholder="0" class="w-full bg-transparent font-black text-2xl md:text-3xl text-earth-900 focus:outline-none mt-1">
+                        </div>
+                        <div class="bg-earth-50 p-4 rounded-2xl border border-earth-200">
+                            <label class="text-xs md:text-sm font-extrabold text-earth-600 block">折合台幣 (NTD $)</label>
+                            <div class="font-black text-2xl md:text-3xl text-earth-900 mt-1">${{ calculatedNTD }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-3xl border border-earth-200 shadow-xs mb-5">
+                    <h3 class="text-sm md:text-base font-extrabold text-earth-800 uppercase tracking-wider mb-3">新增花費記錄</h3>
+                    <div class="space-y-3.5">
+                        <input type="text" v-model="newExpense.title" placeholder="項目名稱 (如: 陽澄湖大閘蟹晚餐)" class="w-full text-base font-bold bg-earth-50 px-4 py-3 rounded-2xl border border-earth-200 focus:outline-none focus:border-earth-600">
+                        <div class="grid grid-cols-2 gap-3">
+                            <input type="number" v-model.number="newExpense.rmb" placeholder="金額 (RMB ¥)" class="text-base font-bold bg-earth-50 px-4 py-3 rounded-2xl border border-earth-200 focus:outline-none focus:border-earth-600">
+                            <select v-model="newExpense.category" class="text-base font-bold bg-earth-50 px-3 py-3 rounded-2xl border border-earth-200 focus:outline-none focus:border-earth-600">
+                                <option value="餐飲">🍽️ 餐飲美食</option>
+                                <option value="交通">🚗 交通車費</option>
+                                <option value="住宿">🏨 飯店住宿</option>
+                                <option value="購物">🛍️ 伴手購物</option>
+                                <option value="門票">🎫 景點門票</option>
+                                <option value="其他">📦 其他雜項</option>
+                            </select>
+                        </div>
+                        <button @click="addExpense" class="w-full bg-earth-800 text-white text-base py-3.5 rounded-2xl font-extrabold shadow hover:bg-earth-900 transition">加入消費明細</button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-3xl border border-earth-200 shadow-xs">
+                    <div class="flex justify-between items-center mb-3 pb-3 border-b border-earth-100">
+                        <span class="text-base font-extrabold text-earth-800">支出累積</span>
+                        <div class="text-right">
+                            <span class="font-black text-xl md:text-2xl text-earth-900">¥{{ totalRMB }}</span>
+                            <span class="text-sm text-earth-700 font-bold"> (NTD ${{ totalNTD }})</span>
+                        </div>
+                    </div>
+                    <div class="space-y-3 max-h-60 overflow-y-auto pr-1">
+                        <div v-for="(exp, idx) in expenses" :key="idx" class="flex justify-between items-center p-3.5 bg-earth-50 rounded-2xl text-base border border-earth-100">
+                            <div>
+                                <div class="font-extrabold text-earth-900 text-base md:text-lg">{{ exp.title }}</div>
+                                <span class="text-xs bg-earth-200 px-2.5 py-0.5 rounded-md text-earth-900 font-black mt-1 inline-block">{{ exp.category }}</span>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <div class="text-right">
+                                    <div class="font-black text-earth-900 text-base md:text-lg">¥{{ exp.rmb }}</div>
+                                    <div class="text-xs text-earth-600 font-bold">≈ NTD ${{ Math.round(exp.rmb * exchangeRate) }}</div>
+                                </div>
+                                <button @click="deleteExpense(idx)" class="text-earth-400 hover:text-red-500 p-1.5"><i class="fa-solid fa-xmark text-lg"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 6: 行李清單 -->
+            <div v-if="currentTab === 'packing'" class="p-5 md:p-6">
+                <div class="mb-4">
+                    <span class="text-xs md:text-sm font-extrabold text-earth-600 tracking-wider uppercase">PACKING CHECKLIST</span>
+                    <h2 class="text-2xl md:text-3xl font-extrabold text-earth-900 mt-0.5">行前行李檢查清單</h2>
+                    <p class="text-sm md:text-base text-earth-700 font-bold mt-1">勾選準備好的物品，確保打包無遺漏</p>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-earth-200 shadow-xs mb-5">
+                    <div class="font-extrabold text-earth-800 text-sm mb-2"><i class="fa-solid fa-cloud-arrow-down mr-1"></i>行程資料備份</div>
+                    <p class="text-xs text-earth-600 mb-3">網頁會自動保存本機修改；也建議定期匯出備份，換裝置或清除瀏覽器資料前可再匯入。</p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button @click="exportBackup" class="bg-earth-800 text-white py-2.5 rounded-xl text-sm font-bold hover:bg-earth-900 transition"><i class="fa-solid fa-download mr-1"></i>匯出備份</button>
+                        <button @click="openImportPicker" class="bg-earth-100 text-earth-800 py-2.5 rounded-xl text-sm font-bold border border-earth-200 hover:bg-earth-200 transition"><i class="fa-solid fa-upload mr-1"></i>匯入備份</button>
+                    </div>
+                    <input id="backupFileInput" type="file" accept="application/json,.json" class="hidden" @change="importBackupFile">
+                    <p v-if="backupMessage" class="text-xs text-earth-700 mt-2 font-bold">{{ backupMessage }}</p>
+                </div>
+
+                <div class="bg-amber-50 p-4.5 rounded-3xl border border-amber-200/80 shadow-xs mb-5">
+                    <h3 class="text-base font-extrabold text-amber-900 uppercase tracking-wider mb-2.5 flex items-center space-x-2">
+                        <i class="fa-solid fa-triangle-exclamation text-amber-600"></i>
+                        <span>📌 登機與託運重要備註</span>
+                    </h3>
+                    <ul class="text-xs md:text-sm font-bold text-amber-950 space-y-2 pl-1 leading-relaxed">
+                        <li class="flex items-start space-x-1.5">
+                            <span class="text-amber-700 font-black">▸</span>
+                            <span>行動電源不可托運，絕緣膠帶封住電極，並放入密封袋。</span>
+                        </li>
+                        <li class="flex items-start space-x-1.5">
+                            <span class="text-amber-700 font-black">▸</span>
+                            <span>自拍棒、相機腳架請托運。</span>
+                        </li>
+                        <li class="flex items-start space-x-1.5">
+                            <span class="text-amber-700 font-black">▸</span>
+                            <span>隨身行李密封塑膠袋內液體總共不超過「1L」，每罐液體不可超過「100ml」！</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="bg-white p-5 rounded-3xl border border-earth-200 shadow-xs mb-5">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm md:text-base font-extrabold text-earth-800">打包完成度</span>
+                        <span class="text-base md:text-lg font-black text-earth-900">{{ completedPackingCount }} / {{ packingItems.length }} ({{ packingPercentage }}%)</span>
+                    </div>
+                    <div class="w-full bg-earth-100 rounded-full h-3.5 border border-earth-200 overflow-hidden">
+                        <div class="bg-earth-800 h-full transition-all duration-300" :style="{ width: packingPercentage + '%' }"></div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-3xl border border-earth-200 shadow-xs mb-5">
+                    <h3 class="text-sm md:text-base font-extrabold text-earth-800 uppercase tracking-wider mb-3">新增行李物品</h3>
+                    <div class="space-y-3">
+                        <input type="text" v-model="newPackingItem.name" placeholder="物品名稱 (如: 護手霜、保溫瓶)" class="w-full text-base font-bold bg-earth-50 px-4 py-3 rounded-2xl border border-earth-200 focus:outline-none focus:border-earth-600">
+                        <div class="flex space-x-3">
+                            <select v-model="newPackingItem.category" class="flex-1 text-base font-bold bg-earth-50 px-3 py-3 rounded-2xl border border-earth-200 focus:outline-none focus:border-earth-600">
+                                <option value="日常、盥洗用品">日常、盥洗用品</option>
+                                <option value="衣物類">衣物類</option>
+                                <option value="3C物品">3C物品</option>
+                                <option value="其他物品">其他物品</option>
+                            </select>
+                            <button @click="addPackingItem" class="bg-earth-800 text-white text-base px-5 py-3 rounded-2xl font-black shadow hover:bg-earth-900 transition shrink-0">加入</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div v-for="cat in packingCategories" :key="cat" class="bg-white p-5 rounded-3xl border border-earth-200 shadow-xs">
+                        <h3 class="font-extrabold text-base md:text-lg text-earth-900 pb-2 mb-3 border-b border-earth-100 flex items-center justify-between">
+                            <span>{{ cat }}</span>
+                            <span class="text-xs bg-earth-100 text-earth-800 px-2.5 py-1 rounded-lg font-black">
+                                {{ getCategoryCompletedCount(cat) }} / {{ getCategoryTotalCount(cat) }}
+                            </span>
+                        </h3>
+                        <div class="space-y-2.5">
+                            <div v-for="item in getPackingItemsByCategory(cat)" :key="item.id"
+                                @click="togglePackingItem(item.id)"
+                                class="flex items-center justify-between p-3 rounded-2xl transition cursor-pointer select-none"
+                                :class="item.checked ? 'bg-earth-100/60 opacity-60' : 'bg-earth-50 hover:bg-earth-100 border border-earth-200'">
+                                <div class="flex items-center space-x-3 flex-1 pr-2">
+                                    <div class="w-6 h-6 rounded-lg border-2 flex items-center justify-center transition shrink-0"
+                                        :class="item.checked ? 'bg-earth-800 border-earth-800 text-white' : 'border-earth-400 bg-white'">
+                                        <i v-if="item.checked" class="fa-solid fa-check text-xs"></i>
+                                    </div>
+                                    <span class="text-base md:text-lg font-bold" :class="item.checked ? 'line-through text-earth-600' : 'text-earth-900'">
+                                        {{ item.name }}
+                                    </span>
+                                </div>
+                                <button @click.stop="deletePackingItem(item.id)" class="text-earth-400 hover:text-red-500 p-1">
+                                    <i class="fa-solid fa-trash-can text-base"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 底部導覽列 -->
+        <div class="absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-earth-200 px-2 py-3 flex justify-around items-center z-30 shadow-lg">
+            <button @click="currentTab = 'itinerary'" :class="currentTab === 'itinerary' ? 'text-earth-900 font-black scale-105' : 'text-earth-400 hover:text-earth-700'" class="flex flex-col items-center space-y-1 transition px-1">
+                <i class="fa-solid fa-calendar-days text-xl"></i>
+                <span class="text-xs font-extrabold">行程</span>
+            </button>
+            <button @click="switchTab('map')" :class="currentTab === 'map' ? 'text-earth-900 font-black scale-105' : 'text-earth-400 hover:text-earth-700'" class="flex flex-col items-center space-y-1 transition px-1">
+                <i class="fa-solid fa-map-location-dot text-xl"></i>
+                <span class="text-xs font-extrabold">地圖</span>
+            </button>
+            <button @click="currentTab = 'accommodation'" :class="currentTab === 'accommodation' ? 'text-earth-900 font-black scale-105' : 'text-earth-400 hover:text-earth-700'" class="flex flex-col items-center space-y-1 transition px-1">
+                <i class="fa-solid fa-hotel text-xl"></i>
+                <span class="text-xs font-extrabold">住宿</span>
+            </button>
+            <button @click="currentTab = 'expense'" :class="currentTab === 'expense' ? 'text-earth-900 font-black scale-105' : 'text-earth-400 hover:text-earth-700'" class="flex flex-col items-center space-y-1 transition px-1">
+                <i class="fa-solid fa-wallet text-xl"></i>
+                <span class="text-xs font-extrabold">記帳</span>
+            </button>
+            <button @click="currentTab = 'packing'" :class="currentTab === 'packing' ? 'text-earth-900 font-black scale-105' : 'text-earth-400 hover:text-earth-700'" class="flex flex-col items-center space-y-1 transition px-1">
+                <i class="fa-solid fa-suitcase text-xl"></i>
+                <span class="text-xs font-extrabold">行李</span>
+            </button>
+        </div>
+
+        <!-- 新增行程 Modal -->
+        <div v-if="showModal" class="absolute inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-6">
+            <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-earth-200 max-h-[90vh] overflow-y-auto">
+                <h3 class="font-extrabold text-xl text-earth-900 mb-4 flex items-center space-x-2">
+                    <i class="fa-solid fa-circle-plus text-earth-700"></i>
+                    <span>新增行程 ({{ currentDay.date }})</span>
+                </h3>
+                <div class="space-y-3.5">
+                    <div>
+                        <label class="text-xs font-extrabold text-earth-600 block mb-1">時間點</label>
+                        <input type="text" v-model="newItem.time" placeholder="例如: 14:00 - 16:00" class="w-full bg-earth-50 px-4 py-2.5 rounded-xl border border-earth-200 text-sm font-bold">
+                    </div>
+                    <div>
+                        <label class="text-xs font-extrabold text-earth-600 block mb-1">景點 / 地點名稱</label>
+                        <input type="text" v-model="newItem.location" placeholder="例如: 震澤古鎮" class="w-full bg-earth-50 px-4 py-2.5 rounded-xl border border-earth-200 text-sm font-bold">
+                    </div>
+                    <div>
+                        <label class="text-xs font-extrabold text-earth-600 block mb-1">簡介</label>
+                        <input type="text" v-model="newItem.intro" placeholder="簡短描述" class="w-full bg-earth-50 px-4 py-2.5 rounded-xl border border-earth-200 text-sm font-bold">
+                    </div>
+                    <div>
+                        <label class="text-xs font-extrabold text-earth-600 block mb-1">門票資訊</label>
+                        <input type="text" v-model="newItem.ticket" placeholder="免費 / 門票 ¥X" class="w-full bg-earth-50 px-4 py-2.5 rounded-xl border border-earth-200 text-sm font-bold">
+                    </div>
+                    <div>
+                        <label class="text-xs font-extrabold text-earth-600 block mb-1">交通方式</label>
+                        <input type="text" v-model="newItem.transport" placeholder="例如: 包車 / 步行" class="w-full bg-earth-50 px-4 py-2.5 rounded-xl border border-earth-200 text-sm font-bold">
+                    </div>
+                    <div>
+                        <label class="text-xs font-extrabold text-earth-600 block mb-1">備註</label>
+                        <input type="text" v-model="newItem.note" placeholder="注意事項" class="w-full bg-earth-50 px-4 py-2.5 rounded-xl border border-earth-200 text-sm font-bold">
+                    </div>
+                </div>
+                <div class="flex space-x-3 mt-6">
+                    <button @click="showModal = false" class="flex-1 bg-earth-100 hover:bg-earth-200 text-earth-800 py-2.5 rounded-xl font-bold transition">取消</button>
+                    <button @click="saveNewItem" class="flex-1 bg-earth-800 hover:bg-earth-900 text-white py-2.5 rounded-xl font-bold transition">確定新增</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
+
+        createApp({
+            setup() {
+                const currentTab = ref('itinerary');
+                const activeDayIndex = ref(0);
+                const showModal = ref(false);
+                const isWeatherLoading = ref(false);
+                const exchangeRate = ref(4.6);
+                const calcRMB = ref(100);
+
+                const calculatedNTD = computed(() => Math.round(calcRMB.value * exchangeRate.value));
+
+                // 2026 年 11 月 14 日（六）至 11 月 18 日（三）對應日期與星期
+                const days = ref([
+                    {
+                        week: '六',
+                        date: '11/14',
+                        title: '台灣➔上海➔震澤古鎮',
+                        weather: { source: '行程參考值（尚未取得指定日期預報）', condition: '晴朗秋高', temp: '11°C - 18°C', rain: '10%' },
+                        items: [
+                            { time: '06:30', location: '桃園國際機場', intro: '第二航廈，6:30集合，航程2小時；準備好台胞證、護照',  note: '' },
+                            { time: '11:30', location: '上海浦東國際機場', intro: '與會合司機前往震澤古鎮，車程2小時', note: '先到飯店寄放行李；格林豪泰（蘇州震澤古鎮店）' },
+                            { time: '15:00', location: '震澤古鎮', intro: '部分景點收費，參觀慈雲禪寺、師儉堂、禹跡橋、寶塔街', note: '店鋪大多到17:00' },
+                            { time: '18:30', location: '大閘蟹晚餐', intro: '', note: '' }
+                        ]
+                    },
+                    {
+                        week: '日',
+                        date: '11/15',
+                        title: '震澤古鎮➔周莊水鄉',
+                        weather: { source: '行程參考值（尚未取得指定日期預報）', condition: '晴時多雲', temp: '10°C - 17°C', rain: '15%' },
+                        items: [
+                            { time: '09:00', location: '震澤古鎮', intro: '當地特色四碗茶',note: '' },
+                            { time: '13:00', location: '周莊古鎮', intro: '出發前往中國第一水鄉周莊，飯店check in，參觀沈廳、張廳', note: '須購買門票¥100/人' },
+                        ]
+                    },
+                    {
+                        week: '一',
+                        date: '11/16',
+                        title: '周莊➔蘇州古城',
+                        weather: { source: '行程參考值（尚未取得指定日期預報）', condition: '多雲陰天', temp: '12°C - 16°C', rain: '25%' },
+                        items: [
+                            { time: '09:00', location: '周莊雙橋', intro: '早餐+繼續沒有逛完的', note: '' },
+                            { time: '15:00', location: '獅子林', intro: '前往蘇州古城，飯店check in，獅子林以湖石假山迷宮聞名的禪意名園(燕譽堂、九獅峰、指柏軒、湖心亭)。', note: '獅子林07:30-17:00，門票¥30/人' },
+                            { time: '18:00', location: '平江路', intro: '生煎、蘇幫菜', note: '' }
+                        ]
+                    },
+                    {
+                        week: '二',
+                        date: '11/17',
+                        title: '蘇州古城',
+                        weather: { source: '行程參考值（尚未取得指定日期預報）', condition: '秋高氣爽', temp: '9°C - 18°C', rain: '10%' },
+                        items: [
+                            { time: '08:00', location: '拙政園', intro: '江南四大名園之首，山水縈繞、廳榭精美、曲廊貫通，蘇州現存最大的古典園林與世界文化遺產(聽雨軒、梧竹幽居、綠漣亭、見山樓、卅六鴛鴦館)。',  note: '門票¥70/人；07:30-17:00' },
+                            { time: '14:00', location: '寒山寺', intro: '「姑蘇城外寒山寺，夜半鐘聲到客船」', note: '門票¥20/人，可至江楓橋碼頭搭船到山塘街下船約35min，船票¥50/人' },
+                            { time: '18:30', location: '七里山塘景區', intro: '',note: '' }
+                        ]
+                    },
+                    {
+                        week: '三',
+                        date: '11/18',
+                        title: '蘇州最後採買 ➔ 台灣',
+                        weather: { source: '行程參考值（尚未取得指定日期預報）', condition: '晴朗舒適', temp: '10°C - 19°C', rain: '5%' },
+                        items: [
+                            { time: '09:30', location: '蘇州市區', intro: '蘇州市區最後採買與伴手禮選購（采芝齋糖果與蘇式糕點）',  note: '' },
+                            { time: '14:00', location: '上海浦東國際機場', intro: '由蘇州乘車前往上海浦東機場準備搭機返台', note: '建議提前3小時到機場' },
+                        ]
+                    }
+                ]);
+
+                const currentDay = computed(() => days.value[activeDayIndex.value]);
+
+                const weatherIconClass = computed(() => {
+                    const cond = currentDay.value.weather.condition;
+                    if (cond.includes('雨')) return 'fa-cloud-rain text-sky-600';
+                    if (cond.includes('陰') || cond.includes('雲')) return 'fa-cloud-sun text-amber-600';
+                    return 'fa-sun text-amber-500';
+                });
+
+                const weatherCodeLabel = (code) => {
+                    if (code === 0) return '晴朗';
+                    if ([1, 2].includes(code)) return '晴時多雲';
+                    if (code === 3) return '多雲陰天';
+                    if ([45, 48].includes(code)) return '有霧';
+                    if ([51, 53, 55, 56, 57].includes(code)) return '毛毛雨';
+                    if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return '有雨';
+                    if ([71, 73, 75, 77, 85, 86].includes(code)) return '降雪';
+                    if ([95, 96, 99].includes(code)) return '雷雨';
+                    return '天氣變化';
+                };
+
+                const dateForDay = (day) => {
+                    const [month, date] = day.date.split('/').map(Number);
+                    return `2026-${String(month).padStart(2, '0')}-${String(date).padStart(2, '0')}`;
+                };
+
+                const fetchWeatherData = async () => {
+                    const selectedDay = currentDay.value;
+                    const targetDate = dateForDay(selectedDay);
+                    isWeatherLoading.value = true;
+                    selectedDay.weather.source = '正在查詢指定日期預報…';
+                    try {
+                        const url = `https://api.open-meteo.com/v1/forecast?latitude=31.2989&longitude=120.5853&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FShanghai&start_date=${targetDate}&end_date=${targetDate}`;
+                        const res = await fetch(url);
+                        if (!res.ok) throw new Error(`Weather API ${res.status}`);
+                        const data = await res.json();
+                        const daily = data && data.daily;
+                        const idx = daily && Array.isArray(daily.time) ? daily.time.indexOf(targetDate) : -1;
+                        if (idx < 0) throw new Error('指定日期尚無可用預報');
+                        const minTemp = daily.temperature_2m_min?.[idx];
+                        const maxTemp = daily.temperature_2m_max?.[idx];
+                        const rainProb = daily.precipitation_probability_max?.[idx];
+                        const code = daily.weather_code?.[idx];
+                        if (Number.isFinite(minTemp) && Number.isFinite(maxTemp)) {
+                            selectedDay.weather.temp = `${Math.round(minTemp)}°C - ${Math.round(maxTemp)}°C`;
+                        }
+                        selectedDay.weather.rain = Number.isFinite(rainProb) ? `${Math.round(rainProb)}%` : '暫無資料';
+                        if (Number.isFinite(code)) selectedDay.weather.condition = weatherCodeLabel(code);
+                        selectedDay.weather.source = `指定日期預報（${targetDate}）`;
+                    } catch (e) {
+                        selectedDay.weather.source = '行程參考值（指定日期預報尚不可用）';
+                        console.info('指定日期天氣尚無可用預報，保留參考資料。', e);
+                    } finally {
+                        isWeatherLoading.value = false;
+                    }
+                };
+
+                onMounted(() => {
+                    fetchWeatherData();
+                });
+
+                const hotels = ref([
+                    { name: '格林豪泰（蘇州震澤古鎮店）', address: '215200, 蘇州, 吳江區, 震澤鎮鎮南路889號', rooms: '2間大床 2間雙床', time: '11/14 - 11/15 (1晚)', dates: '11/14 入住' },
+                    { name: '周莊一樹·瀾舍民宿', address: '崑山, 西灣街12號', rooms: '小院整棟五臥五衛', time: '11/15 - 11/16 (1晚)', dates: '11/15 入住' },
+                    { name: '蘇州枕河民宿（平江路觀前街店）', address: '蘇州, 姑蘇區, 大馬場弄7-2號', rooms: '獨棟整套七室七衛', time: '11/16 - 11/18 (2晚)', dates: '11/16 入住' }
+                ]);
+
+                const expenses = ref([
+                    { title: '陽澄湖大閘蟹晚餐', rmb: 680, category: '餐飲' },
+                    { title: '震澤古鎮特色糕點', rmb: 85, category: '餐飲' },
+                    { title: '拙政園門票', rmb: 160, category: '門票' }
+                ]);
+
+                const newExpense = ref({ title: '', rmb: null, category: '餐飲' });
+                const totalRMB = computed(() => expenses.value.reduce((sum, item) => sum + Number(item.rmb || 0), 0));
+                const totalNTD = computed(() => Math.round(totalRMB.value * exchangeRate.value));
+
+                const addExpense = () => {
+                    if (!newExpense.value.title || !newExpense.value.rmb) return;
+                    expenses.value.unshift({ ...newExpense.value });
+                    newExpense.value.title = '';
+                    newExpense.value.rmb = null;
+                };
+
+                const deleteExpense = (idx) => {
+                    expenses.value.splice(idx, 1);
+                };
+
+                const packingCategories = ref(['日常、盥洗用品', '衣物類', '3C物品', '其他物品']);
+                const packingItems = ref([
+                    { id: 1, name: '清潔用品/保養品', category: '日常、盥洗用品', checked: true },
+                    { id: 2, name: '隱眼/眼鏡/太陽眼鏡', category: '日常、盥洗用品', checked: true },
+                    { id: 3, name: '保溫瓶與常備藥品', category: '日常、盥洗用品', checked: false },
+                    { id: 4, name: '防曬乳/防蚊液', category: '日常、盥洗用品', checked: false },
+                    { id: 5, name: '衛生紙/濕紙巾', category: '日常、盥洗用品', checked: false },
+                    { id: 6, name: '口罩/梳子/鏡子', category: '日常、盥洗用品', checked: false },
+                    { id: 7, name: '衣物/襪子', category: '衣物類', checked: false },
+                    { id: 8, name: '防風保暖外套、圍巾', category: '衣物類', checked: false },
+                    { id: 9, name: '拖鞋', category: '衣物類', checked: true },
+                    { id: 10, name: '充電器/行動電源', category: '3C物品', checked: true },
+                    { id: 11, name: '轉換電壓器', category: '3C物品', checked: false },
+                    { id: 12, name: '水瓶或保溫瓶', category: '其他物品', checked: false }
+                ]);
+
+                const backupMessage = ref('');
+                const storageKey = 'suzhou-crab-trip-v2';
+                const getPersistedState = () => ({
+                    version: 2,
+                    days: days.value,
+                    expenses: expenses.value,
+                    exchangeRate: exchangeRate.value,
+                    packingItems: packingItems.value,
+                    packingCategories: packingCategories.value
+                });
+                const applyPersistedState = (data) => {
+                    if (!data || typeof data !== 'object') throw new Error('備份檔案格式不正確');
+                    if (Array.isArray(data.days) && data.days.length === days.value.length) days.value = data.days;
+                    if (Array.isArray(data.expenses)) expenses.value = data.expenses;
+                    if (Number.isFinite(Number(data.exchangeRate)) && Number(data.exchangeRate) > 0) exchangeRate.value = Number(data.exchangeRate);
+                    if (Array.isArray(data.packingItems)) packingItems.value = data.packingItems;
+                    if (Array.isArray(data.packingCategories)) packingCategories.value = data.packingCategories;
+                };
+                try {
+                    const saved = localStorage.getItem(storageKey);
+                    if (saved) applyPersistedState(JSON.parse(saved));
+                } catch (e) {
+                    console.warn('讀取本機保存資料失敗，先使用預設資料。', e);
+                }
+                watch([days, expenses, exchangeRate, packingItems, packingCategories], () => {
+                    try { localStorage.setItem(storageKey, JSON.stringify(getPersistedState())); }
+                    catch (e) { backupMessage.value = '自動保存失敗，請匯出備份保存資料。'; }
+                }, { deep: true });
+
+                const exportBackup = () => {
+                    try {
+                        const payload = { app: '蘇州古鎮大閘蟹團', exportedAt: new Date().toISOString(), ...getPersistedState() };
+                        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `蘇州古鎮大閘蟹團_備份_${new Date().toISOString().slice(0,10)}.json`;
+                        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+                        backupMessage.value = '備份檔已匯出，請妥善保存。';
+                    } catch (e) { backupMessage.value = '匯出失敗，請稍後再試。'; }
+                };
+                const openImportPicker = () => {
+                    const input = document.getElementById('backupFileInput');
+                    if (input) { input.value = ''; input.click(); }
+                };
+                const importBackupFile = (event) => {
+                    const file = event.target.files && event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        try {
+                            const data = JSON.parse(String(reader.result || ''));
+                            if (!confirm('匯入備份會覆蓋目前行程、記帳與行李清單資料，確定繼續嗎？')) return;
+                            applyPersistedState(data);
+                            localStorage.setItem(storageKey, JSON.stringify(getPersistedState()));
+                            backupMessage.value = '備份已匯入並保存。';
+                            if (currentTab.value === 'map') nextTick(() => initMap());
+                        } catch (e) { backupMessage.value = '匯入失敗：檔案格式不正確或無法保存。'; }
+                        finally { event.target.value = ''; }
+                    };
+                    reader.onerror = () => { backupMessage.value = '無法讀取備份檔案。'; event.target.value = ''; };
+                    reader.readAsText(file);
+                };
+
+                const newPackingItem = ref({ name: '', category: '日常、盥洗用品' });
+                const completedPackingCount = computed(() => packingItems.value.filter(i => i.checked).length);
+                const packingPercentage = computed(() => packingItems.value.length ? Math.round((completedPackingCount.value / packingItems.value.length) * 100) : 0);
+
+                const getCategoryItems = (cat) => packingItems.value.filter(i => i.category === cat);
+                const getCategoryCompletedCount = (cat) => getCategoryItems(cat).filter(i => i.checked).length;
+                const getCategoryTotalCount = (cat) => getCategoryItems(cat).length;
+                const getPackingItemsByCategory = (cat) => getCategoryItems(cat);
+
+                const togglePackingItem = (id) => {
+                    const item = packingItems.value.find(i => i.id === id);
+                    if (item) item.checked = !item.checked;
+                };
+
+                const addPackingItem = () => {
+                    if (!newPackingItem.value.name.trim()) return;
+                    packingItems.value.push({
+                        id: Date.now(),
+                        name: newPackingItem.value.name,
+                        category: newPackingItem.value.category,
+                        checked: false
+                    });
+                    newPackingItem.value.name = '';
+                };
+
+                const deletePackingItem = (id) => {
+                    packingItems.value = packingItems.value.filter(i => i.id !== id);
+                };
+
+                const newItem = ref({ time: '', location: '', intro: '', ticket: '', timeSlot: '', transport: '', note: '' });
+
+                const openAddModal = () => {
+                    newItem.value = { time: '', location: '', intro: '', ticket: '免費', timeSlot: '09:00 - 11:00', transport: '步行', note: '無' };
+                    showModal.value = true;
+                };
+
+                const saveNewItem = () => {
+                    if (!newItem.value.location) return;
+                    currentDay.value.items.push({ ...newItem.value });
+                    showModal.value = false;
+                };
+
+                const promptDeleteItem = (idx) => {
+                    if (confirm('確定要刪除這個行程項目嗎？')) {
+                        currentDay.value.items.splice(idx, 1);
+                    }
+                };
+
+                let mapInstance = null;
+                const dayDirectionsUrl = computed(() => {
+                    const locations = currentDay.value.items.map(item => (item.location || '').trim()).filter(Boolean);
+                    if (!locations.length) return 'https://www.google.com/maps';
+                    if (locations.length === 1) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locations[0])}`;
+                    const origin = locations[0];
+                    const destination = locations[locations.length - 1];
+                    const waypoints = locations.slice(1, -1).join('|');
+                    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : ''}`;
+                });
+
+                const switchTab = (tab) => {
+                    currentTab.value = tab;
+                    if (tab === 'map') nextTick(() => initMap());
+                };
+
+                const selectDay = (index) => {
+                    activeDayIndex.value = index;
+                    fetchWeatherData();
+                    if (currentTab.value === 'map') nextTick(() => initMap());
+                };
+
+                const resolveLocation = (name, dayIndex) => {
+                    const text = String(name || '');
+                    const known = [
+                        { match: ['桃園國際機場', '桃園機場'], lat: 25.0797, lng: 121.2342, label: '桃園國際機場' },
+                        { match: ['上海浦東國際機場', '浦東機場'], lat: 31.1443, lng: 121.8083, label: '上海浦東國際機場' },
+                        { match: ['震澤古鎮', '格林豪泰（蘇州震澤古鎮店）'], lat: 30.9117, lng: 120.5110, label: '震澤古鎮區域' },
+                        { match: ['周莊雙橋', '周莊古鎮', '周莊一樹·瀾舍民宿'], lat: 31.1167, lng: 120.8450, label: '周莊古鎮區域' },
+                        { match: ['獅子林'], lat: 31.3290, lng: 120.6280, label: '獅子林' },
+                        { match: ['平江路'], lat: 31.3155, lng: 120.6270, label: '平江路' },
+                        { match: ['拙政園'], lat: 31.3240, lng: 120.6300, label: '拙政園' },
+                        { match: ['寒山寺'], lat: 31.3050, lng: 120.5760, label: '寒山寺' },
+                        { match: ['七里山塘景區', '山塘街'], lat: 31.3180, lng: 120.6020, label: '七里山塘景區' },
+                        { match: ['蘇州市區', '蘇州枕河民宿（平江路觀前街店）'], lat: 31.2989, lng: 120.5853, label: '蘇州市區參考位置' }
+                    ];
+                    const found = known.find(entry => entry.match.some(part => text.includes(part)));
+                    if (found) return { ...found, exact: !['蘇州市區參考位置', '震澤古鎮區域', '周莊古鎮區域'].includes(found.label) };
+                    const dayCenters = [
+                        { lat: 30.9117, lng: 120.5110, label: '震澤古鎮區域參考點' },
+                        { lat: 31.1167, lng: 120.8450, label: '周莊古鎮區域參考點' },
+                        { lat: 31.2500, lng: 120.7000, label: '周莊至蘇州區域參考點' },
+                        { lat: 31.2989, lng: 120.5853, label: '蘇州市區參考點' },
+                        { lat: 31.1443, lng: 120.8083, label: '蘇州至浦東機場區域參考點' }
+                    ];
+                    return { ...dayCenters[dayIndex] || dayCenters[0], exact: false };
+                };
+
+                const initMap = () => {
+                    const mapContainer = document.getElementById('map');
+                    if (!mapContainer || typeof L === 'undefined') return;
+                    if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+
+                    mapInstance = L.map(mapContainer).setView([31.2989, 120.5853], 10);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; OpenStreetMap contributors',
+                        maxZoom: 19
+                    }).addTo(mapInstance);
+
+                    const markers = [];
+                    const used = new Set();
+                    currentDay.value.items.forEach((item, idx) => {
+                        const loc = resolveLocation(item.location, activeDayIndex.value);
+                        const key = `${loc.lat},${loc.lng},${item.location}`;
+                        if (used.has(key)) return;
+                        used.add(key);
+                        const marker = L.marker([loc.lat, loc.lng]).addTo(mapInstance);
+                        const popup = document.createElement('div');
+                        popup.style.color = '#38302A';
+                        const title = document.createElement('div');
+                        title.style.cssText = 'font-weight:800;font-size:14px;margin-bottom:4px;';
+                        title.textContent = item.location || '行程地點';
+                        const time = document.createElement('div');
+                        time.style.cssText = 'font-size:12px;color:#6E5F52;margin-bottom:4px;';
+                        time.textContent = `${item.time || '時間未設定'} · ${loc.exact ? '景點定位' : '區域參考位置，請確認實際地址'}`;
+                        const link = document.createElement('a');
+                        link.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.location || loc.label)}`;
+                        link.target = '_blank';
+                        link.rel = 'noopener noreferrer';
+                        link.textContent = '在 Google 地圖中導航';
+                        link.style.cssText = 'display:inline-block;margin-top:4px;color:#52473E;font-weight:800;font-size:12px;text-decoration:underline;';
+                        popup.append(title, time, link);
+                        marker.bindPopup(popup);
+                        markers.push(marker);
+                    });
+
+                    if (markers.length > 1) {
+                        const group = L.featureGroup(markers);
+                        mapInstance.fitBounds(group.getBounds().pad(0.18), { maxZoom: 13 });
+                    } else if (markers.length === 1) {
+                        mapInstance.setView(markers[0].getLatLng(), 13);
+                        markers[0].openPopup();
+                    }
+                    setTimeout(() => mapInstance && mapInstance.invalidateSize(), 100);
+                };
+
+                return {
+                    currentTab,
+                    activeDayIndex,
+                    days,
+                    currentDay,
+                    weatherIconClass,
+                    isWeatherLoading,
+                    fetchWeatherData,
+                    hotels,
+                    exchangeRate,
+                    calcRMB,
+                    calculatedNTD,
+                    expenses,
+                    newExpense,
+                    totalRMB,
+                    totalNTD,
+                    addExpense,
+                    deleteExpense,
+                    packingCategories,
+                    packingItems,
+                    newPackingItem,
+                    completedPackingCount,
+                    packingPercentage,
+                    getCategoryCompletedCount,
+                    getCategoryTotalCount,
+                    getPackingItemsByCategory,
+                    togglePackingItem,
+                    addPackingItem,
+                    deletePackingItem,
+                    showModal,
+                    newItem,
+                    openAddModal,
+                    saveNewItem,
+                    promptDeleteItem,
+                    switchTab,
+                    selectDay,
+                    dayDirectionsUrl,
+                    backupMessage,
+                    exportBackup,
+                    openImportPicker,
+                    importBackupFile
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
